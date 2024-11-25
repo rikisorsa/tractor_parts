@@ -9,7 +9,7 @@ const log = (message) => logFile.write(`${new Date().toISOString()} - ${message}
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const scrapeProducts = async (url, collection) => {
-    log(`Scraping products from: ${url}`);
+    log(`Scraping product details from: ${url}`);
     const productsBatch = [];
 
     try {
@@ -18,40 +18,93 @@ const scrapeProducts = async (url, collection) => {
         });
         const $ = cheerio.load(response.data);
 
-        $('meta[property="og:url"]').each((_, el) => {
-            const productLink = $(el).attr('content');
-            const name = $('meta[property="og:title"]').attr('content');
-            const oemNumber = $('meta[property="og:description"]').attr('content');
-            const priceText = $('#spanIsohintaTuotekortti').text().trim();
-            const price = parseFloat(priceText.replace(',', '.')) || null;
+        // Extract product details
+        const name = $('h1.product-name').text().trim();
 
-            if (name && productLink && oemNumber) {
-                const product = {
-                    name,
-                    oemNumbers: oemNumber,
-                    price,
-                    link: productLink,
-                    site: 'Hankkija',
-                    scrapedDate: new Date().toLocaleString('en-GB', {
-                        timeZone: 'Europe/Helsinki',
-                        hour12: false,
-                    }),
-                };
-                log(`Extracted product: ${JSON.stringify(product)}`);
-                productsBatch.push(product);
+        // Extract OEM numbers
+        const oemNumbers = [];
+        $('b:contains("OEM-numero")').each((_, el) => {
+            const oemText = $(el).text().replace('OEM-numero', '').trim();
+            if (oemText) oemNumbers.push(oemText);
+        });
+
+        // Extract price
+        let priceText = $('#spanIsohintaTuotekortti').text().trim(); // Default price
+        if (!priceText) {
+            priceText = $('div.price .price-amount').text().trim(); // Fallback price
+        }
+        if (!priceText) {
+            priceText = $('span.price-amount').text().trim(); // General fallback
+        }
+
+        // Clean up and parse price
+        if (priceText) {
+            priceText = priceText.replace(',', '.'); // Convert comma to dot
+        }
+        const price = parseFloat(priceText) || null;
+
+        // Debugging missing prices
+        if (price === null) {
+            console.log('Price extraction failed for URL:', url);
+            console.log('Price text:', priceText);
+            console.log('Raw HTML:', $('div.h2').html()); // Adjust selector as needed
+        }
+
+        // Extract compatible data
+        const compatible = [];
+        $('.compatible-items__row').each((_, row) => {
+            const type = $(row).find('.compatible-items__type').text().trim();
+            const make = $(row).find('.compatible-items__make').text().trim();
+            const models = [];
+            $(row)
+                .find('.compatible-items__model')
+                .each((_, model) => {
+                    models.push($(model).text().trim());
+                });
+
+            if (type && make && models.length > 0) {
+                compatible.push({ type, make, models });
             }
         });
 
+        // Build product object
+        if (name) {
+            const product = {
+                name,
+                oemNumbers: oemNumbers.length > 0 ? oemNumbers : null,
+                price,
+                link: url,
+                site: 'Hankkija',
+                compatible: compatible.length > 0 ? compatible : null,
+                scrapedDate: new Date().toLocaleString('en-GB', {
+                    timeZone: 'Europe/Helsinki',
+                    hour12: false,
+                }),
+            };
+
+            console.log('Extracted product:', product);
+            log(`Extracted product: ${JSON.stringify(product)}`);
+            productsBatch.push(product);
+        }
+
+        // Insert products into database
         if (productsBatch.length > 0) {
             log(`Extracted ${productsBatch.length} products from ${url}`);
             await insertProductsBatch(productsBatch, collection);
+            console.log('Stored products:', productsBatch);
         } else {
-            log(`No products found on page: ${url}`);
+            log(`No valid product data found on page: ${url}`);
+            console.log(`No valid product data found on page: ${url}`);
         }
     } catch (error) {
-        log(`Error scraping products from ${url}: ${error.message}`);
+        log(`Error scraping product details from ${url}: ${error.message}`);
+        console.error(`Error scraping product details from ${url}:`, error.message);
     }
 };
+
+
+
+
 
 const scrapeHankkijaRecursively = async (initialUrl, collection, maxDepth = 5, visited = new Set()) => {
     const urlsToVisit = [{ url: initialUrl, depth: 0 }];
@@ -81,18 +134,18 @@ const scrapeHankkijaRecursively = async (initialUrl, collection, maxDepth = 5, v
             });
             const $ = cheerio.load(response.data);
 
+            // Scrape current page for products
             if ($('meta[property="og:url"]').length > 0) {
                 await scrapeProducts(url, collection);
             }
 
+            // Extract and queue valid sublinks
             $('a').each((_, el) => {
                 const href = $(el).attr('href');
                 if (
                     href &&
-                    href.startsWith('/varaosat-ja-tarvikkeet/') &&
-                    !href.includes('/ajankohtaista/') &&
-                    !href.includes('/campaign/') &&
-                    !visited.has(`https://www.hankkija.fi${href}`)
+                    href.startsWith('/varaosat-ja-tarvikkeet/') && // Keep only valid product links
+                    !visited.has(`https://www.hankkija.fi${href}`) // Avoid revisiting links
                 ) {
                     const fullUrl = `https://www.hankkija.fi${href}`;
                     urlsToVisit.push({ url: fullUrl, depth: depth + 1 });
@@ -100,7 +153,7 @@ const scrapeHankkijaRecursively = async (initialUrl, collection, maxDepth = 5, v
                 }
             });
 
-            await sleep(2000);
+            await sleep(2000); // Throttle requests to avoid being blocked
         } catch (error) {
             log(`Error scraping sublinks from ${url}: ${error.message}`);
         }
