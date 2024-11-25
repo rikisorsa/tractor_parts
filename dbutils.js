@@ -9,22 +9,28 @@ let client;
 const connectToDatabase = async () => {
     try {
         if (!client) {
-            client = await MongoClient.connect(mongoUrl);
-            console.log('Connected to MongoDB');
+            client = new MongoClient(mongoUrl); // No need for useUnifiedTopology
+            await client.connect();
+            console.log(`[${new Date().toISOString()}] Connected to MongoDB`);
         }
         const db = client.db(dbName);
         const collection = db.collection(collectionName);
+        console.log(`[${new Date().toISOString()}] Using collection: ${collectionName}`);
         return { db, collection };
     } catch (error) {
-        console.error('Error connecting to MongoDB:', error);
-        process.exit(1);
+        console.error(`[${new Date().toISOString()}] Error connecting to MongoDB:`, error);
+        process.exit(1); // Ensure the app exits if DB connection fails
     }
 };
 
 const closeDatabase = async () => {
     if (client) {
-        await client.close();
-        console.log('MongoDB connection closed.');
+        try {
+            await client.close();
+            console.log(`[${new Date().toISOString()}] MongoDB connection closed.`);
+        } catch (error) {
+            console.error(`[${new Date().toISOString()}] Error closing MongoDB connection:`, error);
+        }
     }
 };
 
@@ -56,13 +62,12 @@ const insertProductsBatch = async (products, collection) => {
                 },
             }));
             const result = await collection.bulkWrite(operations);
-            console.log(`${result.upsertedCount} new products inserted.`);
+            console.log(`[${new Date().toISOString()}] ${result.upsertedCount} new products inserted.`);
         } else {
-            console.log('No products to insert.');
+            console.log(`[${new Date().toISOString()}] No products to insert.`);
         }
     } catch (error) {
-        console.error('Error inserting products batch into DB:', error);
+        console.error(`[${new Date().toISOString()}] Error inserting products batch into DB:`, error);
     }
 };
-
 module.exports = { connectToDatabase, closeDatabase, insertProductsBatch };

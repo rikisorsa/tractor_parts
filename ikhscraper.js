@@ -107,7 +107,10 @@ const scrapeIKH = async () => {
                     compatibleTractors,
                     link: fullProductLink,
                     site: 'IKH',
-                    scrapedDate: new Date().toISOString(),
+                    scrapedDate: new Date().toLocaleString('en-GB', {
+                        timeZone: 'Europe/Helsinki',
+                        hour12: false,
+                    }),
                 };
 
                 productsBatch.push(product);
