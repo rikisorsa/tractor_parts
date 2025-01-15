@@ -3,7 +3,16 @@ const Product = require('../models/product');
 
 const router = express.Router();
 
-// GET: Search products
+// Default GET: Return all products
+router.get('/', async (req, res) => {
+  try {
+      const products = await Product.find().limit(50);
+      res.json(products);
+  } catch (err) {
+      res.status(500).json({ error: 'Error retrieving products', details: err.message });
+  }
+});
+
 // GET: Search products
 router.get('/search', async (req, res) => {
   try {
