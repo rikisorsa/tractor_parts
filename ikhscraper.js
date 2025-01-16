@@ -15,13 +15,20 @@ const saveImageToLocal = async (url, filename) => {
         fs.mkdirSync(dir, { recursive: true });
     }
 
+    const filePath = path.join(dir, filename);
+
+    // Check if file already exists
+    if (fs.existsSync(filePath)) {
+        console.log(`Image already exists, skipping: ${filePath}`);
+        return;
+    }
+
     const response = await axios({
         url,
         method: 'GET',
         responseType: 'stream',
     });
 
-    const filePath = path.join(dir, filename);
     const writer = fs.createWriteStream(filePath);
 
     response.data.pipe(writer);
@@ -50,7 +57,7 @@ const markLinkAsVisited = async (url, visitedLinksCollection, today) => {
     );
 };
 
-// Function to scrape product details, including image URL
+// Function to scrape product details, including image URL and category
 const scrapeIKHProductDetails = async (productUrl) => {
     try {
         const response = await axios.get(productUrl);
@@ -67,13 +74,16 @@ const scrapeIKHProductDetails = async (productUrl) => {
             imageUrl = `https://www.ikh.fi${imageUrl}`;
         }
 
+        const category = $('td[data-th="Varaosatyyppi"]').text().trim() || null;
+
         return {
             oemNumbers: oemNumbers.length > 0 ? oemNumbers : null,
             imageUrl: imageUrl || null,
+            category: category,
         };
     } catch (error) {
         console.error(`Error scraping product details from: ${productUrl}`, error);
-        return { oemNumbers: null, imageUrl: null };
+        return { oemNumbers: null, imageUrl: null, category: null };
     }
 };
 
@@ -129,14 +139,14 @@ const scrapeIKH = async () => {
                 console.log(`Scraping product details from: ${fullProductLink}`);
                 await sleep(50);
 
-                const { oemNumbers, imageUrl } = await scrapeIKHProductDetails(fullProductLink);
+                const { oemNumbers, imageUrl, category } = await scrapeIKHProductDetails(fullProductLink);
 
                 // Determine image filename based on OEM number or product name
                 let imageFilename = oemNumbers && oemNumbers.length > 0
                     ? `${oemNumbers[0]}.jpg`
                     : `${productName.replace(/\s+/g, '_')}.jpg`;
 
-                // Save image locally if available
+                // Save image locally if available and not already saved
                 if (imageUrl) {
                     await saveImageToLocal(imageUrl, imageFilename);
                 }
@@ -144,6 +154,7 @@ const scrapeIKH = async () => {
                 const product = {
                     name: productName,
                     oemNumbers,
+                    category,
                     link: fullProductLink,
                     site: 'IKH',
                     scrapedDate: new Date().toLocaleString('en-GB', {
