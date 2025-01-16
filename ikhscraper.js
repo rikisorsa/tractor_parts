@@ -1,14 +1,47 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const fs = require('fs');
+const path = require('path');
 const { connectToDatabase, closeDatabase, insertProductsBatch } = require('./dbutils');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Function to save image locally
+const saveImageToLocal = async (url, filename) => {
+    if (!url) return;
+
+    const dir = path.join(__dirname, 'images/oem');
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+
+    const response = await axios({
+        url,
+        method: 'GET',
+        responseType: 'stream',
+    });
+
+    const filePath = path.join(dir, filename);
+    const writer = fs.createWriteStream(filePath);
+
+    response.data.pipe(writer);
+
+    return new Promise((resolve, reject) => {
+        writer.on('finish', () => {
+            console.log(`Image saved locally as: ${filePath}`);
+            resolve(filePath);
+        });
+        writer.on('error', reject);
+    });
+};
+
+// Function to check if a link has been visited
 const isLinkVisited = async (url, visitedLinksCollection, today) => {
     const existingLink = await visitedLinksCollection.findOne({ url, date: today });
     return !!existingLink;
 };
 
+// Function to mark a link as visited
 const markLinkAsVisited = async (url, visitedLinksCollection, today) => {
     await visitedLinksCollection.updateOne(
         { url },
@@ -17,6 +50,7 @@ const markLinkAsVisited = async (url, visitedLinksCollection, today) => {
     );
 };
 
+// Function to scrape product details, including image URL
 const scrapeIKHProductDetails = async (productUrl) => {
     try {
         const response = await axios.get(productUrl);
@@ -28,22 +62,22 @@ const scrapeIKHProductDetails = async (productUrl) => {
             if (oemNumber) oemNumbers.push(oemNumber);
         });
 
-        const compatibleTractors = [];
-        $('div.compatible-items__models a.compatible-items__model').each((_, element) => {
-            const tractorModel = $(element).attr('title');
-            if (tractorModel) compatibleTractors.push(tractorModel);
-        });
+        let imageUrl = $('img.product-image-photo').attr('src');
+        if (imageUrl && imageUrl.startsWith('/')) {
+            imageUrl = `https://www.ikh.fi${imageUrl}`;
+        }
 
         return {
             oemNumbers: oemNumbers.length > 0 ? oemNumbers : null,
-            compatibleTractors: compatibleTractors.length > 0 ? compatibleTractors : [],
+            imageUrl: imageUrl || null,
         };
     } catch (error) {
         console.error(`Error scraping product details from: ${productUrl}`, error);
-        return { oemNumbers: null, compatibleTractors: [] };
+        return { oemNumbers: null, imageUrl: null };
     }
 };
 
+// Main scraping function
 const scrapeIKH = async () => {
     const baseUrl = 'https://www.ikh.fi/fi/varaosat/traktori';
     let currentPage = 1;
@@ -62,6 +96,7 @@ const scrapeIKH = async () => {
     do {
         const url = `${baseUrl}?p=${currentPage}&product_list_mode=list`;
 
+        // Check if the link is already visited
         if (await isLinkVisited(url, visitedLinksCollection, today)) {
             console.log(`Skipping already visited link: ${url}`);
             currentPage++;
@@ -87,24 +122,28 @@ const scrapeIKH = async () => {
             for (const element of productElements) {
                 const productName = $(element).find('.product-item-name').text().trim();
                 const productLink = $(element).find('.product-item-name a').attr('href');
-                const productNumber = $(element).find('.product-item-sku').text().trim();
-                const productPrice = $(element).find('.price').text().trim();
-
                 const fullProductLink = productLink.startsWith('/')
                     ? `https://www.ikh.fi${productLink}`
                     : productLink;
 
                 console.log(`Scraping product details from: ${fullProductLink}`);
-                await sleep(2000);
+                await sleep(50);
 
-                const { oemNumbers, compatibleTractors } = await scrapeIKHProductDetails(fullProductLink);
+                const { oemNumbers, imageUrl } = await scrapeIKHProductDetails(fullProductLink);
+
+                // Determine image filename based on OEM number or product name
+                let imageFilename = oemNumbers && oemNumbers.length > 0
+                    ? `${oemNumbers[0]}.jpg`
+                    : `${productName.replace(/\s+/g, '_')}.jpg`;
+
+                // Save image locally if available
+                if (imageUrl) {
+                    await saveImageToLocal(imageUrl, imageFilename);
+                }
 
                 const product = {
                     name: productName,
-                    number: productNumber,
-                    price: productPrice || null,
                     oemNumbers,
-                    compatibleTractors,
                     link: fullProductLink,
                     site: 'IKH',
                     scrapedDate: new Date().toLocaleString('en-GB', {
