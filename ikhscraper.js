@@ -15,13 +15,20 @@ const saveImageToLocal = async (url, filename) => {
         fs.mkdirSync(dir, { recursive: true });
     }
 
+    const filePath = path.join(dir, filename);
+
+    // Check if file already exists
+    if (fs.existsSync(filePath)) {
+        console.log(`Image already exists, skipping: ${filePath}`);
+        return;
+    }
+
     const response = await axios({
         url,
         method: 'GET',
         responseType: 'stream',
     });
 
-    const filePath = path.join(dir, filename);
     const writer = fs.createWriteStream(filePath);
 
     response.data.pipe(writer);
@@ -50,7 +57,7 @@ const markLinkAsVisited = async (url, visitedLinksCollection, today) => {
     );
 };
 
-// Function to scrape product details, including image URL
+// Function to scrape product details, including image URL, category, and price
 const scrapeIKHProductDetails = async (productUrl) => {
     try {
         const response = await axios.get(productUrl);
@@ -67,13 +74,21 @@ const scrapeIKHProductDetails = async (productUrl) => {
             imageUrl = `https://www.ikh.fi${imageUrl}`;
         }
 
+        const category = $('td[data-th="Varaosatyyppi"]').text().trim() || null;
+
+        // Extract price from the span element and clean up non-breaking spaces
+        let price = $('span.price.price-with-unit').text().trim();
+        price = price.replace(/ /g, '').replace(/[^0-9,]/g, '').trim(); // Keep only numeric values and comma // Remove &nbsp; and € symbol
+
         return {
             oemNumbers: oemNumbers.length > 0 ? oemNumbers : null,
             imageUrl: imageUrl || null,
+            category: category,
+            price: price || null,
         };
     } catch (error) {
         console.error(`Error scraping product details from: ${productUrl}`, error);
-        return { oemNumbers: null, imageUrl: null };
+        return { oemNumbers: null, imageUrl: null, category: null, price: null };
     }
 };
 
@@ -129,14 +144,14 @@ const scrapeIKH = async () => {
                 console.log(`Scraping product details from: ${fullProductLink}`);
                 await sleep(50);
 
-                const { oemNumbers, imageUrl } = await scrapeIKHProductDetails(fullProductLink);
+                const { oemNumbers, imageUrl, category, price } = await scrapeIKHProductDetails(fullProductLink);
 
                 // Determine image filename based on OEM number or product name
                 let imageFilename = oemNumbers && oemNumbers.length > 0
                     ? `${oemNumbers[0]}.jpg`
                     : `${productName.replace(/\s+/g, '_')}.jpg`;
 
-                // Save image locally if available
+                // Save image locally if available and not already saved
                 if (imageUrl) {
                     await saveImageToLocal(imageUrl, imageFilename);
                 }
@@ -144,6 +159,8 @@ const scrapeIKH = async () => {
                 const product = {
                     name: productName,
                     oemNumbers,
+                    category,
+                    price,
                     link: fullProductLink,
                     site: 'IKH',
                     scrapedDate: new Date().toLocaleString('en-GB', {
