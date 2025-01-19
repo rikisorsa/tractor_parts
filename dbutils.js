@@ -1,6 +1,7 @@
 const { MongoClient } = require('mongodb');
 
-const mongoUrl = 'mongodb://localhost:27017';
+require('dotenv').config();
+const mongoUrl = `mongodb://admin:${process.env.MONGO_PASSWORD}@mongodb:27017`;
 const dbName = 'tractorPartsDB';
 const collectionName = 'main';
 
@@ -56,6 +57,7 @@ const insertProductsBatch = async (products, collection) => {
                             price: product.price,
                             oemNumbers: product.oemNumbers || null,
                             compatibleTractors: product.compatibleTractors || [],
+                            category: product.category || null, // Add category here
                         },
                     },
                     upsert: true,
@@ -70,4 +72,5 @@ const insertProductsBatch = async (products, collection) => {
         console.error(`[${new Date().toISOString()}] Error inserting products batch into DB:`, error);
     }
 };
+
 module.exports = { connectToDatabase, closeDatabase, insertProductsBatch };
