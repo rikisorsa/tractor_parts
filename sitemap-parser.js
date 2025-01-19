@@ -2,7 +2,7 @@ const axios = require('axios');
 const { parseStringPromise } = require('xml2js');
 
 const sitemapUrl = 'https://www.hankkija.fi/sitemap.xml';
-
+/* const sitemapUrl = 'https://www.ikh.fi/fi/media/sitemap_fi_finland-1-1.xml'; */
 async function parseSitemap() {
     try {
         // Fetch the sitemap XML
@@ -16,8 +16,8 @@ async function parseSitemap() {
         const urls = result.urlset.url.map(entry => entry.loc[0]);
 
         // Filter URLs under "varaosat-ja-tarvikkeet"
+        /* const varaosatUrls = urls.filter(url => url.includes('/varaosat-ja-tarvikkeet/')); */
         const varaosatUrls = urls.filter(url => url.includes('/varaosat-ja-tarvikkeet/'));
-
         console.log(`Total URLs under "varaosat-ja-tarvikkeet": ${varaosatUrls.length}`);
         console.log('Example URLs:', varaosatUrls.slice(0, 10)); // Display the first 10 URLs
     } catch (error) {

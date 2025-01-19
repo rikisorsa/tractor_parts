@@ -10,5 +10,5 @@ const productSchema = new mongoose.Schema({
 });
 
 // Bind schema to the "IKH" collection
-module.exports = mongoose.model('Product', productSchema, 'IKH');
+module.exports = mongoose.model('Product', productSchema, 'main');
 
