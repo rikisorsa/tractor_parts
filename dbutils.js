@@ -1,6 +1,7 @@
 const { MongoClient } = require('mongodb');
 
-const mongoUrl = 'mongodb://localhost:27017';
+require('dotenv').config();
+const mongoUrl = `mongodb://admin:${process.env.MONGO_PASSWORD}@mongodb:27017`;
 const dbName = 'tractorPartsDB';
 const collectionName = 'main';
 
