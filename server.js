@@ -6,8 +6,14 @@ const productRoutes = require('./routes/productRoutes');
 
 const app = express();
 
-// Middleware
-app.use(cors());
+// CORS Configuration
+const corsOptions = {
+  origin: 'https://farmeri.fi', // Allow requests from this domain
+  methods: 'GET,POST,PUT,DELETE',
+  allowedHeaders: 'Content-Type,Authorization'
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Construct MongoDB Connection String
