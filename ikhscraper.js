@@ -1,46 +1,8 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const fs = require('fs');
-const path = require('path');
 const { connectToDatabase, closeDatabase, insertProductsBatch } = require('./dbutils');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// Function to save image locally
-const saveImageToLocal = async (url, filename) => {
-    if (!url) return;
-
-    const dir = path.join(__dirname, 'images/oem');
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-    }
-
-    const filePath = path.join(dir, filename);
-
-    // Check if file already exists
-    if (fs.existsSync(filePath)) {
-        console.log(`Image already exists, skipping: ${filePath}`);
-        return;
-    }
-
-    const response = await axios({
-        url,
-        method: 'GET',
-        responseType: 'stream',
-    });
-
-    const writer = fs.createWriteStream(filePath);
-
-    response.data.pipe(writer);
-
-    return new Promise((resolve, reject) => {
-        writer.on('finish', () => {
-            console.log(`Image saved locally as: ${filePath}`);
-            resolve(filePath);
-        });
-        writer.on('error', reject);
-    });
-};
 
 // Function to check if a link has been visited
 const isLinkVisited = async (url, visitedLinksCollection, today) => {
@@ -69,11 +31,6 @@ const scrapeIKHProductDetails = async (productUrl) => {
             if (oemNumber) oemNumbers.push(oemNumber);
         });
 
-        let imageUrl = $('img.product-image-photo').attr('src');
-        if (imageUrl && imageUrl.startsWith('/')) {
-            imageUrl = `https://www.ikh.fi${imageUrl}`;
-        }
-
         const category = $('td[data-th="Varaosatyyppi"]').text().trim() || null;
 
         // Extract price from the span element and clean up non-breaking spaces
@@ -82,13 +39,12 @@ const scrapeIKHProductDetails = async (productUrl) => {
 
         return {
             oemNumbers: oemNumbers.length > 0 ? oemNumbers : null,
-            imageUrl: imageUrl || null,
             category: category,
             price: price || null,
         };
     } catch (error) {
         console.error(`Error scraping product details from: ${productUrl}`, error);
-        return { oemNumbers: null, imageUrl: null, category: null, price: null };
+        return { oemNumbers: null, category: null, price: null };
     }
 };
 
@@ -144,17 +100,7 @@ const scrapeIKH = async () => {
                 console.log(`Scraping product details from: ${fullProductLink}`);
                 await sleep(50);
 
-                const { oemNumbers, imageUrl, category, price } = await scrapeIKHProductDetails(fullProductLink);
-
-                // Determine image filename based on OEM number or product name
-                let imageFilename = oemNumbers && oemNumbers.length > 0
-                    ? `${oemNumbers[0]}.jpg`
-                    : `${productName.replace(/\s+/g, '_')}.jpg`;
-
-                // Save image locally if available and not already saved
-                if (imageUrl) {
-                    await saveImageToLocal(imageUrl, imageFilename);
-                }
+                const { oemNumbers, category, price } = await scrapeIKHProductDetails(fullProductLink);
 
                 const product = {
                     name: productName,

@@ -1,26 +1,31 @@
 const { MongoClient } = require('mongodb');
-
 require('dotenv').config();
-const mongoUrl = `mongodb://admin:${process.env.MONGO_PASSWORD}@mongodb:27017`;
-const dbName = 'tractorPartsDB';
-const collectionName = 'main';
+
+const isProduction = process.env.NODE_ENV === 'production';
+
+// MongoDB URL without authentication for local development
+const mongoUrl = isProduction
+    ? `mongodb://${process.env.MONGO_USER}:${process.env.MONGO_PASSWORD}@${process.env.MONGO_HOST_PROD}:${process.env.MONGO_PORT_PROD}`
+    : `mongodb://${process.env.MONGO_HOST_DEV}:${process.env.MONGO_PORT_DEV}`; // No credentials for local dev
+
+const dbName = process.env.MONGO_DB_NAME || 'tractorPartsDB';
+const collectionName = process.env.MONGO_COLLECTION_NAME || 'main';
 
 let client;
 
 const connectToDatabase = async () => {
     try {
         if (!client) {
-            client = new MongoClient(mongoUrl); // No need for useUnifiedTopology
+            client = new MongoClient(mongoUrl);
             await client.connect();
-            console.log(`[${new Date().toISOString()}] Connected to MongoDB`);
+            console.log(`[${new Date().toISOString()}] Connected to MongoDB (${isProduction ? 'Production' : 'Development'})`);
         }
         const db = client.db(dbName);
         const collection = db.collection(collectionName);
-        console.log(`[${new Date().toISOString()}] Using collection: ${collectionName}`);
         return { db, collection };
     } catch (error) {
         console.error(`[${new Date().toISOString()}] Error connecting to MongoDB:`, error);
-        process.exit(1); // Ensure the app exits if DB connection fails
+        process.exit(1);
     }
 };
 
@@ -57,7 +62,7 @@ const insertProductsBatch = async (products, collection) => {
                             price: product.price,
                             oemNumbers: product.oemNumbers || null,
                             compatibleTractors: product.compatibleTractors || [],
-                            category: product.category || null, // Add category here
+                            category: product.category || null,
                         },
                     },
                     upsert: true,
