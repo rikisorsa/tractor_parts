@@ -32,23 +32,36 @@ const scrapeLakkapaa = async () => {
         const productsBatch = await page.evaluate(() => {
             return Array.from(document.querySelectorAll('.ProductCard__product-data-wrapper')).map(element => {
                 const productName = element.querySelector('h2')?.textContent.trim() || null;
-                const productLink = element.querySelector('a.ProductLink')?.href || null;
-                const model = element.querySelector('.ProductCard__model')?.textContent.trim() || null;
+                const productLink = element.querySelector('a.ProductLink')?.getAttribute('href') || null;
+                const modelText = element.querySelector('.ProductCard__model')?.textContent.trim() || null;
                 const description = element.querySelector('.ProductDescription')?.textContent.trim() || null;
                 const price = element.querySelector('span.Price--discount .Price--amount-wrapper')?.textContent.trim() || 
                               element.querySelector('span.Price--muted .Price--amount-wrapper')?.textContent.trim() || null;
                 const availability = element.querySelector('.multistorage-stock-text')?.textContent.trim() || null;
+        
+                // Extract the OEM number from the description
+                let oemNumbers = null;
+                if (description) {
+                    const match = description.match(/Tuotenumero:\s*([A-Za-z0-9-]+)/);
+                    if (match) {
+                        oemNumbers = match[1].trim(); // Extract the actual number
+                    }
+                }
+        
                 return {
                     name: productName,
-                    model: model,
+                    oemNumbers: oemNumbers, // ✅ Extracted from the description
+                    model: modelText,
                     price: price,
-                    link: productLink ? `https://www.lakkapaa.com${productLink}` : null,
+                    link: productLink ? `https://www.lakkapaa.com${productLink.replace('https://www.lakkapaa.com', '')}` : null, // ✅ Fix duplicated links
                     availability: availability,
                     site: 'Lakkapaa',
                     scrapedDate: new Date().toLocaleString('en-GB', { timeZone: 'Europe/Helsinki', hour12: false }),
                 };
             });
         });
+        
+              
 
         console.log(`✅ Found ${productsBatch.length} products on page ${currentPage}`);
 
