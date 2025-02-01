@@ -1,7 +1,7 @@
 const axios = require('axios');
 const { parseStringPromise } = require('xml2js');
 
-const sitemapUrl = 'https://www.hankkija.fi/sitemap.xml';
+const sitemapUrl = 'https://www.lakkapaa.com/backend/api/v1/feeds/sitemap?sitemap=sitemap_0_products';
 /* const sitemapUrl = 'https://www.ikh.fi/fi/media/sitemap_fi_finland-1-1.xml'; */
 async function parseSitemap() {
     try {
@@ -17,7 +17,7 @@ async function parseSitemap() {
 
         // Filter URLs under "varaosat-ja-tarvikkeet"
         /* const varaosatUrls = urls.filter(url => url.includes('/varaosat-ja-tarvikkeet/')); */
-        const varaosatUrls = urls.filter(url => url.includes('/varaosat-ja-tarvikkeet/'));
+        const varaosatUrls = urls.filter(url => url.includes('/maatalous-ja-konekauppa/'));
         console.log(`Total URLs under "varaosat-ja-tarvikkeet": ${varaosatUrls.length}`);
         console.log('Example URLs:', varaosatUrls.slice(0, 10)); // Display the first 10 URLs
     } catch (error) {

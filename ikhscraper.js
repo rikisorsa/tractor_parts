@@ -19,7 +19,7 @@ const markLinkAsVisited = async (url, visitedLinksCollection, today) => {
     );
 };
 
-// Function to scrape product details, including image URL, category, and price
+// Function to scrape product details, including URL, category, and price
 const scrapeIKHProductDetails = async (productUrl) => {
     try {
         const response = await axios.get(productUrl);
