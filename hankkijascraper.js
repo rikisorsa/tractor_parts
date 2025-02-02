@@ -75,6 +75,7 @@ const scrapeProducts = async (url, collection) => {
                 price,
                 link: url,
                 site: 'Hankkija',
+                country: ['FIN'],
                 compatible: compatible.length > 0 ? compatible : null,
                 scrapedDate: new Date().toLocaleString('en-GB', {
                     timeZone: 'Europe/Helsinki',

@@ -42,6 +42,7 @@ const scrapeIKHLight = async () => {
                     link: productLink || null,
                     availability: availability,
                     site: 'IKH',
+                    country: ['FIN'],
                     scrapedDate: new Date().toLocaleString('en-GB', { timeZone: 'Europe/Helsinki', hour12: false }),
                 });
             });

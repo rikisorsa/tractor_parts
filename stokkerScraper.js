@@ -46,6 +46,7 @@ const scrapeStokker = async () => {
         image: product.ImageM || "N/A",
         category: product.CategoryPath || "Unknown",
         site: "Stokker",
+        country: ['FIN', 'EST'],
         scrapedDate: new Date().toLocaleString("en-GB", { timeZone: "Europe/Helsinki", hour12: false }),
       }));
 

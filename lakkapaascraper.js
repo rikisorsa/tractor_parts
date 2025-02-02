@@ -56,6 +56,7 @@ const scrapeLakkapaa = async () => {
                     link: productLink ? `https://www.lakkapaa.com${productLink.replace('https://www.lakkapaa.com', '')}` : null, // ✅ Fix duplicated links
                     availability: availability,
                     site: 'Lakkapaa',
+                    country: ['FIN'],
                     scrapedDate: new Date().toLocaleString('en-GB', { timeZone: 'Europe/Helsinki', hour12: false }),
                 };
             });

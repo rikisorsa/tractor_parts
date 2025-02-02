@@ -109,6 +109,7 @@ const scrapeIKH = async () => {
                     price,
                     link: fullProductLink,
                     site: 'IKH',
+                    country: ['FIN'],
                     scrapedDate: new Date().toLocaleString('en-GB', {
                         timeZone: 'Europe/Helsinki',
                         hour12: false,

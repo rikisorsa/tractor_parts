@@ -56,6 +56,7 @@ const insertProductsBatch = async (products, collection) => {
                             number: product.number,
                             link: product.link,
                             site: product.site,
+                            country: product.country || [],
                             scrapedDate: product.scrapedDate,
                         },
                         $set: {
