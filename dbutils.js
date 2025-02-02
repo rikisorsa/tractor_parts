@@ -63,6 +63,7 @@ const insertProductsBatch = async (products, collection) => {
                             oemNumbers: product.oemNumbers || null,
                             compatibleTractors: product.compatibleTractors || [],
                             category: product.category || null,
+                            availability: product.availability || null,
                         },
                     },
                     upsert: true,
