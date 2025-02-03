@@ -35,12 +35,17 @@ const scrapeIKHProductDetails = async (productUrl) => {
 
         // Extract price from the span element and clean up non-breaking spaces
         let price = $('span.price.price-with-unit').text().trim();
-        price = price.replace(/ /g, '').replace(/[^0-9,]/g, '').trim(); // Keep only numeric values and comma // Remove &nbsp; and € symbol
+        price = price.replace(/ /g, '').replace(/[^0-9,€]/g, '').trim(); // Keep numeric values, comma, and € symbol
+
+
+        // Extract brand from the <a> element (if available)
+        let brand = $('a[title]').first().attr('title') || "Muut tuotemerkit"; // Default if not found
 
         return {
             oemNumbers: oemNumbers.length > 0 ? oemNumbers : null,
             category: category,
             price: price || null,
+            brand,
         };
     } catch (error) {
         console.error(`Error scraping product details from: ${productUrl}`, error);
@@ -107,6 +112,7 @@ const scrapeIKH = async () => {
                     oemNumbers,
                     category,
                     price,
+                    brand,
                     link: fullProductLink,
                     site: 'IKH',
                     country: ['FIN'],

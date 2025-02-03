@@ -61,7 +61,7 @@ const insertProductsBatch = async (products, collection) => {
                         },
                         $set: {
                             price: product.price,
-                            oemNumbers: product.oemNumbers || null,
+                            oemNumbers: product.oemNumbers || [],
                             compatibleTractors: product.compatibleTractors || [],
                             category: product.category || null,
                             availability: product.availability || null,
