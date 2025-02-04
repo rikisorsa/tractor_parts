@@ -1,6 +1,6 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs');
-const { connectToDatabase, closeDatabase } = require('./dbutils');
+const { connectToDatabase, closeDatabase, updateIKHProducts } = require('./dbutils_light');
 
 const baseUrl = 'https://www.ikh.fi/fi/varaosat/traktori?p=';
 const maxPages = 100;
@@ -46,27 +46,7 @@ const scrapeIKHLight = async () => {
 
             console.log(`✅ Found ${products.length} products on page ${currentPage}`);
 
-            for (const product of products) {
-                const existingProduct = await productsCollection.findOne({ name: product.name, site: 'IKH' });
-
-                if (existingProduct) {
-                    let updates = {};
-                    if (existingProduct.price !== product.price) {
-                        updates.price = product.price;
-                    }
-                    if (existingProduct.availability !== product.availability) {
-                        updates.availability = product.availability;
-                    }
-
-                    if (Object.keys(updates).length > 0) {
-                        await productsCollection.updateOne(
-                            { name: product.name, site: 'IKH' },
-                            { $set: updates }
-                        );
-                        logUpdate(`Updated: ${product.name} | ${JSON.stringify(updates)}`);
-                    }
-                }
-            }
+            await updateIKHProducts(products, productsCollection);
         } catch (error) {
             console.error(`❌ Error scraping page ${currentPage}:`, error.message);
             break;
