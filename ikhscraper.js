@@ -103,9 +103,9 @@ const scrapeIKH = async () => {
                     : productLink;
 
                 console.log(`Scraping product details from: ${fullProductLink}`);
-                await sleep(50);
+                await sleep(1000);
 
-                const { oemNumbers, category, price } = await scrapeIKHProductDetails(fullProductLink);
+                const { oemNumbers, category, price, brand } = await scrapeIKHProductDetails(fullProductLink);
 
                 const product = {
                     name: productName,
