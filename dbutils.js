@@ -47,14 +47,13 @@ const insertProductsBatch = async (products, collection) => {
                 updateOne: {
                     filter: {
                         name: product.name,
-                        number: product.number,
                         site: product.site,
                     },
                     update: {
                         $setOnInsert: {
                             name: product.name,
-                            number: product.number,
                             link: product.link,
+                            brand: product.brand,
                             site: product.site,
                             country: product.country || [],
                             scrapedDate: product.scrapedDate,

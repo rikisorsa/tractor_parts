@@ -1,69 +1,82 @@
-const axios = require('axios');
-const cheerio = require('cheerio');
-const { connectToDatabase, closeDatabase, insertProductsBatch } = require('./dbutils');
+const puppeteer = require('puppeteer');
+const fs = require('fs');
+const { connectToDatabase, closeDatabase } = require('./dbutils');
 
 const baseUrl = 'https://www.ikh.fi/fi/varaosat/traktori?p=';
-const maxPages = 100; // Adjust based on the actual number of pages
+const maxPages = 100;
+const logFilePath = '/log/ikh_updates.log';
+
+const logUpdate = (message) => {
+    const timestamp = new Date().toISOString();
+    const logEntry = `[${timestamp}] ${message}\n`;
+    fs.appendFileSync(logFilePath, logEntry);
+};
 
 const scrapeIKHLight = async () => {
-    console.log('Starting IKH Light scraper...');
-    
+    console.log('Starting IKH Light scraper with Puppeteer...');
     const { collection: productsCollection, db } = await connectToDatabase();
-    let currentPage = 1;
+    const browser = await puppeteer.launch({ headless: true });
+    const page = await browser.newPage();
     
+    let currentPage = 1;
+
     while (currentPage <= maxPages) {
         const url = `${baseUrl}${currentPage}`;
         console.log(`Scraping page: ${currentPage}, URL: ${url}`);
-        
+
         try {
-            const response = await axios.get(url);
-            const $ = cheerio.load(response.data);
-            
-            const productsBatch = [];
-            
-            $('.product-item-info').each((_, element) => {
-                const productElement = $(element);
-                const productName = productElement.find('a.product-item-link').text().trim();
-                const productLink = productElement.find('a.product-item-link').attr('href');
-                const oemNumbers = productElement.find('.product-item-sku').text().trim() || null;
-                const price = productElement.find('.price.price-with-unit').text().trim() || null;
-                
-                let availability = 'Unknown';
-                if (productElement.find('button.action.tocart.primary').length > 0) {
-                    availability = 'In Stock';
-                } else if (productElement.find('.stock.unavailable').length > 0) {
-                    availability = 'Out of Stock';
-                }
-                
-                productsBatch.push({
-                    name: productName,
-                    oemNumbers: oemNumbers,
-                    price: price,
-                    link: productLink || null,
-                    availability: availability,
-                    site: 'IKH',
-                    country: ['FIN'],
-                    scrapedDate: new Date().toLocaleString('en-GB', { timeZone: 'Europe/Helsinki', hour12: false }),
+            await page.goto(url, { waitUntil: 'networkidle2' });
+
+            // Extract product details
+            const products = await page.evaluate(() => {
+                let results = [];
+                document.querySelectorAll('.product-item-info').forEach(item => {
+                    let name = item.querySelector('.product-item-link')?.innerText.trim() || null;
+                    let link = item.querySelector('.product-item-link')?.href || null;
+                    let price = item.querySelector('.price')?.innerText.trim() || null;
+                    let availability = item.querySelector('button.action.tocart.primary') ? 'In Stock' :
+                                      item.querySelector('div.stock.unavailable') ? 'Out of Stock' : 'Unknown';
+                    
+                    if (name && link) {
+                        results.push({ name, link, price, availability });
+                    }
                 });
+                return results;
             });
-            
-            console.log(`✅ Found ${productsBatch.length} products on page ${currentPage}`);
-            
-            if (productsBatch.length > 0) {
-                await insertProductsBatch(productsBatch, productsCollection);
-            } else {
-                console.log('❌ No products found, stopping scraper.');
-                break;
+
+            console.log(`✅ Found ${products.length} products on page ${currentPage}`);
+
+            for (const product of products) {
+                const existingProduct = await productsCollection.findOne({ name: product.name, site: 'IKH' });
+
+                if (existingProduct) {
+                    let updates = {};
+                    if (existingProduct.price !== product.price) {
+                        updates.price = product.price;
+                    }
+                    if (existingProduct.availability !== product.availability) {
+                        updates.availability = product.availability;
+                    }
+
+                    if (Object.keys(updates).length > 0) {
+                        await productsCollection.updateOne(
+                            { name: product.name, site: 'IKH' },
+                            { $set: updates }
+                        );
+                        logUpdate(`Updated: ${product.name} | ${JSON.stringify(updates)}`);
+                    }
+                }
             }
         } catch (error) {
             console.error(`❌ Error scraping page ${currentPage}:`, error.message);
             break;
         }
-        
+
         currentPage++;
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Prevent rate limiting
+        await new Promise(resolve => setTimeout(resolve, 2000));
     }
-    
+
+    await browser.close();
     await closeDatabase();
     console.log('✅ Scraping complete!');
 };
