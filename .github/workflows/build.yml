@@ -27,7 +27,7 @@ jobs:
       - name: Run SonarQube Scan (Windows)
         shell: cmd
         run: |
-          sonar-scanner -Dsonar.projectKey=my_project ^
+          sonar-scanner -Dsonar.projectKey=farmeri_backend ^
                         -Dsonar.sources=${{ github.workspace }} ^
                         -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} ^
                         -Dsonar.login=${{ secrets.SONAR_TOKEN }}
