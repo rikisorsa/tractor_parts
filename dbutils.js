@@ -43,23 +43,22 @@ const closeDatabase = async () => {
 const insertProductsBatch = async (products, collection) => {
     try {
         if (products.length > 0) {
+            console.log(`🔄 Attempting to insert ${products.length} products into MongoDB...`);
+
             const operations = products.map((product) => ({
                 updateOne: {
-                    filter: {
-                        name: product.name,
-                        site: product.site,
-                    },
+                    filter: { link: product.link }, // Ensure uniqueness using `link`
                     update: {
                         $setOnInsert: {
-                            name: product.name,
+                            name: product.name || "Unknown Product",
                             link: product.link,
-                            brand: product.brand,
+                            brand: product.brand || "Unknown",
                             site: product.site,
                             country: product.country || [],
                             scrapedDate: product.scrapedDate,
                         },
                         $set: {
-                            price: product.price,
+                            price: product.price || "N/A",
                             oemNumbers: product.oemNumbers || [],
                             compatibleTractors: product.compatibleTractors || [],
                             category: product.category || null,
@@ -69,13 +68,15 @@ const insertProductsBatch = async (products, collection) => {
                     upsert: true,
                 },
             }));
+
             const result = await collection.bulkWrite(operations);
-            console.log(`[${new Date().toISOString()}] ${result.upsertedCount} new products inserted.`);
+            console.log(`[${new Date().toISOString()}] ✅ ${result.upsertedCount} new products inserted.`);
+            console.log(`[${new Date().toISOString()}] 🔄 ${result.modifiedCount} products updated.`);
         } else {
-            console.log(`[${new Date().toISOString()}] No products to insert.`);
+            console.log(`⚠️ No products to insert.`);
         }
     } catch (error) {
-        console.error(`[${new Date().toISOString()}] Error inserting products batch into DB:`, error);
+        console.error(`❌ MongoDB Insert Error:`, error);
     }
 };
 

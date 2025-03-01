@@ -24,13 +24,14 @@ jobs:
       - name: Install Dependencies
         run: npm install  # Change to yarn install if using Yarn
 
-      - name: Run SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v4
-        with:
-          projectBaseDir: ${{ github.workspace }}
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      - name: Run SonarQube Scan (Windows)
+        shell: cmd
+        run: |
+          sonar-scanner -Dsonar.projectKey=my_project \
+            -Dsonar.sources=${{ github.workspace }} \
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+
 
 
 
