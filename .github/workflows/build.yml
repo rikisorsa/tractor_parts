@@ -26,9 +26,13 @@ jobs:
 
       - name: Run SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v4
+        with:
+          projectBaseDir: ${{ github.workspace }}
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+
 
       # Uncomment if you want to fail the build if the Quality Gate fails
       # - name: SonarQube Quality Gate Check
