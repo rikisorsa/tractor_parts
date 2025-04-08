@@ -1,73 +1,52 @@
+// hankkijascraper.js - Puppeteer-integrated version (fixed browser sharing + tab cleanup)
+
 const fs = require('fs');
-const axios = require('axios');
+const puppeteer = require('puppeteer');
 const cheerio = require('cheerio');
 const { connectToDatabase, closeDatabase, insertProductsBatch } = require('./dbutils');
 
-const logFile = fs.createWriteStream('scraper.log', { flags: 'a' }); // Append mode
+const logFile = fs.createWriteStream('scraper.log', { flags: 'a' });
 const log = (message) => logFile.write(`${new Date().toISOString()} - ${message}\n`);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const scrapeProducts = async (url, collection) => {
+const scrapeProducts = async (url, collection, browser) => {
     log(`Scraping product details from: ${url}`);
     const productsBatch = [];
 
+    let page;
     try {
-        const response = await axios.get(url, {
-            headers: { 'Accept-Encoding': 'gzip, deflate, br' },
-        });
-        const $ = cheerio.load(response.data);
+        page = await browser.newPage();
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
-        // Extract product details
-        const name = $('h1.product-name').text().trim();
+        const name = await page.$eval('h1.product-name', el => el.textContent.trim()).catch(() => null);
 
-        // Extract OEM numbers
-        const oemNumbers = [];
-        $('b:contains("OEM-numero")').each((_, el) => {
-            const oemText = $(el).text().replace('OEM-numero', '').trim();
-            if (oemText) oemNumbers.push(oemText);
+        const oemNumbers = await page.$$eval('b', elements => {
+            return elements
+                .filter(el => el.textContent.includes('OEM-numero'))
+                .map(el => el.textContent.replace('OEM-numero', '').trim());
         });
 
-        // Extract price
-        let priceText = $('#spanIsohintaTuotekortti').text().trim(); // Default price
-        if (!priceText) {
-            priceText = $('div.price .price-amount').text().trim(); // Fallback price
-        }
-        if (!priceText) {
-            priceText = $('span.price-amount').text().trim(); // General fallback
-        }
+        let price = await page.$eval('#spanIsohintaTuotekortti', el => el.textContent.trim())
+            .then(text => parseFloat(text.replace(/\s/g, '').replace(',', '.')))
+            .catch(() => null);
 
-        // Clean up and parse price
-        if (priceText) {
-            priceText = priceText.replace(',', '.'); // Convert comma to dot
-        }
-        const price = parseFloat(priceText) || null;
-
-        // Debugging missing prices
-        if (price === null) {
-            console.log('Price extraction failed for URL:', url);
-            console.log('Price text:', priceText);
-            console.log('Raw HTML:', $('div.h2').html()); // Adjust selector as needed
+        if (!price) {
+            price = await page.$eval('button.add-to-cart[data-hn]', btn =>
+                parseFloat(btn.getAttribute('data-hn'))
+            ).catch(() => null);
         }
 
-        // Extract compatible data
-        const compatible = [];
-        $('.compatible-items__row').each((_, row) => {
-            const type = $(row).find('.compatible-items__type').text().trim();
-            const make = $(row).find('.compatible-items__make').text().trim();
-            const models = [];
-            $(row)
-                .find('.compatible-items__model')
-                .each((_, model) => {
-                    models.push($(model).text().trim());
-                });
-
-            if (type && make && models.length > 0) {
-                compatible.push({ type, make, models });
-            }
+        const compatible = await page.$$eval('.compatible-items__row', rows => {
+            return rows.map(row => {
+                const type = row.querySelector('.compatible-items__type')?.textContent.trim();
+                const make = row.querySelector('.compatible-items__make')?.textContent.trim();
+                const models = Array.from(row.querySelectorAll('.compatible-items__model'))
+                    .map(m => m.textContent.trim());
+                return type && make && models.length > 0 ? { type, make, models } : null;
+            }).filter(Boolean);
         });
 
-        // Build product object
         if (name) {
             const product = {
                 name,
@@ -78,8 +57,7 @@ const scrapeProducts = async (url, collection) => {
                 country: ['FIN'],
                 compatible: compatible.length > 0 ? compatible : null,
                 scrapedDate: new Date().toLocaleString('en-GB', {
-                    timeZone: 'Europe/Helsinki',
-                    hour12: false,
+                    timeZone: 'Europe/Helsinki', hour12: false,
                 }),
             };
 
@@ -88,7 +66,6 @@ const scrapeProducts = async (url, collection) => {
             productsBatch.push(product);
         }
 
-        // Insert products into database
         if (productsBatch.length > 0) {
             log(`Extracted ${productsBatch.length} products from ${url}`);
             await insertProductsBatch(productsBatch, collection);
@@ -97,85 +74,75 @@ const scrapeProducts = async (url, collection) => {
             log(`No valid product data found on page: ${url}`);
             console.log(`No valid product data found on page: ${url}`);
         }
+
     } catch (error) {
         log(`Error scraping product details from ${url}: ${error.message}`);
         console.error(`Error scraping product details from ${url}:`, error.message);
+    } finally {
+        if (page) await page.close();
     }
 };
 
-
-
-
-
-const scrapeHankkijaRecursively = async (initialUrl, collection, maxDepth = 5, visited = new Set()) => {
+const scrapeHankkijaRecursively = async (initialUrl, collection, browser, maxDepth = 5, visited = new Set()) => {
     const urlsToVisit = [{ url: initialUrl, depth: 0 }];
     let pagesScraped = 0;
 
     while (urlsToVisit.length > 0) {
         const { url, depth } = urlsToVisit.pop();
 
-        if (visited.has(url)) {
-            log(`Skipping already visited URL: ${url}`);
-            continue;
-        }
-        if (depth > maxDepth) {
-            log(`Skipping URL due to max depth: ${url}`);
-            continue;
-        }
+        if (visited.has(url) || depth > maxDepth) continue;
 
         visited.add(url);
         pagesScraped++;
-
         log(`Scraping sublinks from: ${url}, depth: ${depth}`);
-        log(`Pages scraped so far: ${pagesScraped}, Pages left in queue: ${urlsToVisit.length}`);
 
+        let page;
         try {
-            const response = await axios.get(url, {
-                headers: { 'Accept-Encoding': 'gzip, deflate, br' },
-            });
-            const $ = cheerio.load(response.data);
+            page = await browser.newPage();        
+            await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+            const html = await page.content();
+            const $ = cheerio.load(html);
 
-            // Scrape current page for products
-            if ($('meta[property="og:url"]').length > 0) {
-                await scrapeProducts(url, collection);
+            // Only scrape product pages
+            if ($('meta[property="og:url"]').length > 0 && $('h1.product-name').length > 0) {
+                await scrapeProducts(url, collection, browser);
             }
 
-            // Extract and queue valid sublinks
             $('a').each((_, el) => {
                 const href = $(el).attr('href');
-                if (
-                    href &&
-                    href.startsWith('/varaosat-ja-tarvikkeet/') && // Keep only valid product links
-                    !visited.has(`https://www.hankkija.fi${href}`) // Avoid revisiting links
-                ) {
+                if (href && href.startsWith('/varaosat-ja-tarvikkeet/')) {
                     const fullUrl = `https://www.hankkija.fi${href}`;
-                    urlsToVisit.push({ url: fullUrl, depth: depth + 1 });
-                    log(`Added to queue: ${fullUrl}`);
+                    if (!visited.has(fullUrl)) {
+                        urlsToVisit.push({ url: fullUrl, depth: depth + 1 });
+                    }
                 }
             });
 
-            await sleep(2000); // Throttle requests to avoid being blocked
+            await sleep(2000);
         } catch (error) {
             log(`Error scraping sublinks from ${url}: ${error.message}`);
+        } finally {
+            if (page) await page.close();
         }
     }
 
     log(`Finished scraping. Total pages scraped: ${pagesScraped}`);
 };
 
-
 const main = async () => {
     const { collection } = await connectToDatabase();
+    const browser = await puppeteer.launch({ headless: true });
 
     try {
         const initialUrl = 'https://www.hankkija.fi/varaosat-ja-tarvikkeet/';
-        await scrapeHankkijaRecursively(initialUrl, collection);
+        await scrapeHankkijaRecursively(initialUrl, collection, browser);
     } catch (error) {
         log(`Error during scraping: ${error.message}`);
     } finally {
+        await browser.close();
         await closeDatabase();
         log('MongoDB connection closed.');
-        logFile.end(); // Close the log file when finished
+        logFile.end();
     }
 };
 
